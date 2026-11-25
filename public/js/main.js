@@ -79,6 +79,56 @@
     });
   }
 
+  // Facebook feed: custom cards when the server has Graph API access, otherwise Facebook's Page embed.
+  const feed = document.getElementById('fb-feed');
+  if (feed) {
+    const pageUrl = feed.dataset.page;
+    const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const safeUrl = (u) => (/^https:\/\//i.test(u || '') ? u : pageUrl);
+    const clip = (t, n) => (t.length > n ? t.slice(0, n).replace(/\s+\S*$/, '') + '…' : t);
+    const when = (iso) => {
+      const d = new Date(iso);
+      if (isNaN(d)) return '';
+      const days = Math.floor((Date.now() - d) / 86400000);
+      if (days < 1) return 'Today';
+      if (days === 1) return 'Yesterday';
+      if (days < 7) return `${days} days ago`;
+      return d.toLocaleDateString([], { month: 'short', day: 'numeric', year: d.getFullYear() === new Date().getFullYear() ? undefined : 'numeric' });
+    };
+
+    const renderEmbed = () => {
+      const w = Math.min(500, Math.max(280, feed.clientWidth));
+      const src = 'https://www.facebook.com/plugins/page.php?' + new URLSearchParams({
+        href: pageUrl, tabs: 'timeline', width: String(w), height: '620', small_header: 'true',
+        adapt_container_width: 'true', hide_cover: 'false', show_facepile: 'false',
+      });
+      feed.innerHTML = `<div class="fb-embed">
+        <div class="fb-embed-side">
+          <img src="/images/latte-art.jpg" alt="Latte art at FairPour" loading="lazy">
+          <p>Scroll our latest Facebook posts right here, or tap through to follow FairPour for daily specials and new roasts.</p>
+        </div>
+        <div class="fb-embed-frame"><iframe src="${esc(src)}" title="FairPour Coffee Roasters on Facebook" loading="lazy" scrolling="no" allowfullscreen allow="clipboard-write; encrypted-media; picture-in-picture; web-share"></iframe></div>
+      </div>`;
+    };
+
+    const renderPosts = (posts) => {
+      feed.innerHTML = `<div class="fb-posts">${posts.slice(0, 3).map((p) => `
+        <a class="fb-post${p.image ? '' : ' text-only'}" href="${esc(safeUrl(p.url))}" target="_blank" rel="noopener">
+          ${p.image ? `<div class="fb-post-img"><img src="${esc(p.image)}" alt="" loading="lazy" referrerpolicy="no-referrer"></div>` : ''}
+          <div class="fb-post-body">
+            <div class="fb-post-meta"><img src="/images/logo-160.png" alt="">FairPour · ${esc(when(p.date))}</div>
+            ${p.text ? `<p class="fb-post-text">${esc(clip(p.text, p.image ? 180 : 260))}</p>` : ''}
+            <span class="fb-post-link">Read on Facebook →</span>
+          </div>
+        </a>`).join('')}</div>`;
+    };
+
+    fetch('/api/facebook-feed')
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((d) => (d.configured && d.posts && d.posts.length ? renderPosts(d.posts) : renderEmbed()))
+      .catch(renderEmbed);
+  }
+
   const y = document.getElementById('year');
   if (y) y.textContent = new Date().getFullYear();
 })();

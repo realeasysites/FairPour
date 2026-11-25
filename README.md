@@ -36,13 +36,28 @@ npm start              # http://localhost:3000
 4. **Add a persistent disk** (e.g. mount at `/var/data`) and set `DB_PATH`. Without one, saved inquiries reset on each deploy. Emails still go out either way.
 5. Point the domain (fairpour.com, owned by the client) at Render.
 
+## Facebook feed ("What's Brewing" section)
+
+Whatever FairPour posts on its Facebook Page shows up on the site automatically. It runs in one of two modes:
+
+1. **Embed mode (default, no setup).** If no Facebook keys are set, the section shows Facebook's official Page embed for facebook.com/fairpour, with the live timeline, follower count and Follow button. Some ad blockers and strict privacy browsers hide Facebook embeds.
+2. **Custom feed mode (on-brand cards).** With `FB_PAGE_ID` and `FB_PAGE_TOKEN` set, the server pulls the latest posts through the Graph API (v26.0) and shows the newest 3 as styled cards. Posts are cached for 20 minutes. If Facebook errors out, the site keeps showing the last good posts. If it has none, it falls back to the embed.
+
+### Getting the Page token (needs admin or full-control access to the FairPour Page)
+
+1. At developers.facebook.com, create an app (type **Business**). Development mode is fine.
+2. Open **Graph API Explorer**, pick the app, and add the permissions `pages_show_list` and `pages_read_engagement`. Click **Generate Access Token** and approve the FairPour Page.
+3. Paste that token into the **Access Token Debugger** and click **Extend Access Token** to get a long-lived user token.
+4. In the Explorer, run `GET /me/accounts` with the long-lived token. Copy FairPour's `id` into `FB_PAGE_ID` and its `access_token` into `FB_PAGE_TOKEN`. A Page token made from a long-lived user token doesn't expire unless the password changes or access is removed.
+5. Add both values in Render under Environment and redeploy.
+
 ## Folder layout
 
 ```
 server.js        thin entry point
 db/              SQLite setup (inquiries table)
-lib/             auth (password + signed cookie), mailer
-routes/          inquiry API, admin routes
+lib/             auth (password + signed cookie), mailer, Facebook Graph API client
+routes/          inquiry API, Facebook feed API, admin routes
 views/           admin login + dashboard pages
 public/          the website (html, css, js, images)
 ```

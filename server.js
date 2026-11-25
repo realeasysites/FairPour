@@ -16,6 +16,7 @@ const express = require('express');
 const db = require('./db');
 const adminRoutes = require('./routes/admin');
 const inquiryRoutes = require('./routes/inquiry');
+const facebookRoutes = require('./routes/facebook');
 
 const app = express();
 app.set('trust proxy', 1);
@@ -32,6 +33,7 @@ app.use((req, res, next) => {
 // Admin first, so /admin always asks for the password before anything static is served.
 app.use(adminRoutes(db));
 app.use('/api/inquiry', inquiryRoutes(db));
+app.use('/api/facebook-feed', facebookRoutes());
 
 app.get('/healthz', (req, res) => res.json({ ok: true }));
 
