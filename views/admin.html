@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Inquiries | FairPour Admin</title>
+<meta name="robots" content="noindex, nofollow">
+<link rel="icon" href="/images/favicon-64.png" type="image/png">
+<style>
+  :root { --navy: #1b2236; --burgundy: #7a2431; --copper: #c9773f; --cream: #f6efe4; --paper: #fbf8f2; --line: #e4d9ca; --muted: #6e6a75; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--paper); font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: #1f2433; }
+  header { background: var(--navy); color: var(--cream); padding: .9rem 1.25rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; position: sticky; top: 0; z-index: 5; }
+  .brand { display: flex; align-items: center; gap: .7rem; font-family: Georgia, serif; font-size: 1.2rem; font-weight: 700; }
+  .brand img { width: 42px; height: 42px; border-radius: 50%; background: #fff; }
+  header a, header button { color: var(--cream); background: none; border: 1px solid rgba(246,239,228,.3); border-radius: 999px; padding: .45rem .95rem; font-size: .88rem; cursor: pointer; text-decoration: none; }
+  header .actions { display: flex; gap: .5rem; }
+  main { max-width: 1100px; margin: 0 auto; padding: 1.5rem 1.25rem 4rem; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: .8rem; margin-bottom: 1.4rem; }
+  .stat { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 1rem; }
+  .stat b { display: block; font-size: 1.8rem; font-family: Georgia, serif; color: var(--navy); }
+  .stat span { font-size: .78rem; text-transform: uppercase; letter-spacing: .12em; color: var(--muted); font-weight: 700; }
+  .filters { display: flex; flex-wrap: wrap; gap: .5rem; margin-bottom: 1.2rem; }
+  .filters button { border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: .45rem .95rem; cursor: pointer; font-size: .88rem; font-weight: 600; color: var(--navy); }
+  .filters button.on { background: var(--navy); color: #fff; border-color: var(--navy); }
+  .list { display: grid; gap: .9rem; }
+  .card { background: #fff; border: 1px solid var(--line); border-left: 5px solid var(--copper); border-radius: 12px; padding: 1.1rem 1.2rem; }
+  .card[data-status="new"] { border-left-color: var(--burgundy); }
+  .card[data-status="booked"] { border-left-color: #2f7a46; }
+  .card[data-status="closed"] { border-left-color: #a9a3ad; opacity: .85; }
+  .top { display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap; align-items: flex-start; }
+  .who { font-weight: 700; font-size: 1.08rem; color: var(--navy); }
+  .when { color: var(--muted); font-size: .85rem; }
+  .chips { display: flex; flex-wrap: wrap; gap: .35rem; margin: .55rem 0; }
+  .chip { font-size: .75rem; font-weight: 700; background: var(--cream); color: #3a2a22; padding: .25rem .6rem; border-radius: 999px; }
+  .chip.topic { background: var(--navy); color: #fff; }
+  .contact a { color: var(--burgundy); font-weight: 600; text-decoration: none; margin-right: 1rem; font-size: .92rem; }
+  .msg { white-space: pre-wrap; margin: .6rem 0 .8rem; line-height: 1.5; }
+  .ctrl { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; }
+  select { padding: .45rem .6rem; border-radius: 8px; border: 1px solid var(--line); font: inherit; font-size: .88rem; }
+  .del { margin-left: auto; background: none; border: 1px solid #e3c3c7; color: var(--burgundy); border-radius: 8px; padding: .45rem .8rem; cursor: pointer; font-size: .85rem; font-weight: 600; }
+  .del:hover { background: var(--burgundy); color: #fff; }
+  .empty { text-align: center; padding: 3rem 1rem; color: var(--muted); background: #fff; border: 1px dashed var(--line); border-radius: 12px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand"><img src="/images/logo-160.png" alt="">FairPour Inquiries</div>
+  <div class="actions"><a href="/" target="_blank" rel="noopener">View site</a><button id="logout">Log out</button></div>
+</header>
+<main>
+  <div class="stats" id="stats"></div>
+  <div class="filters" id="filters"></div>
+  <div class="list" id="list"><p class="empty">Loading…</p></div>
+</main>
+<script>
+  let data = [], statuses = [], filter = 'all';
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+  const fmt = (iso) => { const d = new Date(iso.replace(' ', 'T') + 'Z'); return isNaN(d) ? iso : d.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }); };
+
+  async function api(url, opts = {}) {
+    const r = await fetch(url, { ...opts, headers: { 'Content-Type': 'application/json' } });
+    if (r.status === 401) { location.href = '/admin/login'; throw new Error('signed out'); }
+    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || 'Request failed');
+    return r.json();
+  }
+
+  async function load() {
+    const j = await api('/admin/api/inquiries');
+    data = j.inquiries; statuses = j.statuses; render();
+  }
+
+  function render() {
+    const count = (s) => data.filter((d) => d.status === s).length;
+    $('stats').innerHTML = `<div class="stat"><b>${data.length}</b><span>Total</span></div>` +
+      statuses.map((s) => `<div class="stat"><b>${count(s)}</b><span>${cap(s)}</span></div>`).join('');
+    $('filters').innerHTML = ['all', ...statuses].map((s) => `<button data-f="${s}" class="${s === filter ? 'on' : ''}">${cap(s)}</button>`).join('');
+    const rows = filter === 'all' ? data : data.filter((d) => d.status === filter);
+    if (!rows.length) { $('list').innerHTML = `<p class="empty">${data.length ? 'Nothing in this view.' : 'No inquiries yet. New messages from the website will show up here.'}</p>`; return; }
+    $('list').innerHTML = rows.map((d) => `
+      <article class="card" data-status="${esc(d.status)}">
+        <div class="top">
+          <div><div class="who">${esc(d.name)}</div><div class="when">${esc(fmt(d.created_at))}</div></div>
+        </div>
+        <div class="chips">
+          <span class="chip topic">${esc(d.topic || 'General')}</span>
+          ${d.location ? `<span class="chip">📍 ${esc(d.location)}</span>` : ''}
+          ${d.event_date ? `<span class="chip">📅 ${esc(d.event_date)}</span>` : ''}
+          ${d.headcount ? `<span class="chip">👥 ${esc(d.headcount)}</span>` : ''}
+        </div>
+        <div class="contact">
+          <a href="mailto:${esc(d.email)}">${esc(d.email)}</a>
+          ${d.phone ? `<a href="tel:${esc(d.phone.replace(/[^\d+]/g, ''))}">${esc(d.phone)}</a>` : ''}
+        </div>
+        <div class="msg">${esc(d.message)}</div>
+        <div class="ctrl">
+          <label>Status <select data-id="${d.id}">${statuses.map((s) => `<option value="${s}" ${s === d.status ? 'selected' : ''}>${cap(s)}</option>`).join('')}</select></label>
+          <button class="del" data-del="${d.id}">Delete</button>
+        </div>
+      </article>`).join('');
+  }
+
+  $('filters').addEventListener('click', (e) => { const b = e.target.closest('[data-f]'); if (b) { filter = b.dataset.f; render(); } });
+  $('list').addEventListener('change', async (e) => {
+    const sel = e.target.closest('select[data-id]'); if (!sel) return;
+    await api(`/admin/api/inquiries/${sel.dataset.id}`, { method: 'PATCH', body: JSON.stringify({ status: sel.value }) });
+    const row = data.find((d) => d.id === Number(sel.dataset.id)); if (row) row.status = sel.value; render();
+  });
+  $('list').addEventListener('click', async (e) => {
+    const b = e.target.closest('[data-del]'); if (!b) return;
+    if (!confirm('Delete this inquiry permanently? Use this for spam or test entries.')) return;
+    await api(`/admin/api/inquiries/${b.dataset.del}`, { method: 'DELETE' });
+    data = data.filter((d) => d.id !== Number(b.dataset.del)); render();
+  });
+  $('logout').addEventListener('click', async () => { await fetch('/admin/logout', { method: 'POST' }); location.href = '/admin/login'; });
+  load().catch((err) => { if (err.message !== 'signed out') $('list').innerHTML = `<p class="empty">${esc(err.message)}</p>`; });
+</script>
+</body>
+</html>
